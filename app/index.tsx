@@ -33,7 +33,7 @@ export default function HomeScreen() {
         paddingHorizontal: theme.spacing.lg,
       }}
     >
-      <ScreenHeader title="Forma" subtitle="Шаблонный экран — замени на свой." />
+      <ScreenHeader title="FerroLift" subtitle="Шаблонный экран — замени на свой." />
 
       <View style={{ flexDirection: "row", gap: theme.spacing.sm, marginBottom: theme.spacing.lg }}>
         <TextInput

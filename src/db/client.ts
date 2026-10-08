@@ -1,7 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import { runMigrations } from "./migrations";
 
-const DB_NAME = "forma.db";
+const DB_NAME = "ferrolift.db";
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let readyPromise: Promise<SQLite.SQLiteDatabase> | null = null;

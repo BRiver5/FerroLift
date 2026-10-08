@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Forma",
-    "slug": "forma",
+    "name": "FerroLift",
+    "slug": "ferrolift",
     "version": "1.0.0",
-    "scheme": "forma",
+    "scheme": "ferrolift",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -15,10 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.forma.app"
+      "bundleIdentifier": "com.ferrolift.app"
     },
     "android": {
-      "package": "com.forma.app",
+      "package": "com.ferrolift.app",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundImage": "./assets/adaptive-icon-background.png",
