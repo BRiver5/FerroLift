@@ -23,6 +23,7 @@ export async function loadTrainingSettings(): Promise<TrainingSettings> {
         ? raw.availableWeekdays.split(",").map(Number).filter((day) => day >= 0 && day <= 6)
         : c.availableWeekdays,
       minTrainingDays: num(raw.minTrainingDays, c.minTrainingDays),
+      maxTrainingDays: num(raw.maxTrainingDays, c.maxTrainingDays),
       maxFitnessDropPct: num(raw.maxFitnessDropPct, c.maxFitnessDropPct),
       locked: {},
     },
@@ -37,5 +38,6 @@ export async function persistTrainingSettings(settings: TrainingSettings): Promi
   await saveSettingRaw("allowBackToBackHard", c.allowBackToBackHard ? "1" : "0");
   await saveSettingRaw("availableWeekdays", c.availableWeekdays.join(","));
   await saveSettingRaw("minTrainingDays", String(c.minTrainingDays));
+  await saveSettingRaw("maxTrainingDays", String(c.maxTrainingDays));
   await saveSettingRaw("maxFitnessDropPct", String(c.maxFitnessDropPct));
 }

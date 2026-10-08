@@ -111,6 +111,21 @@ test("новичок без истории: потолок ACWR не режет 
   assert.ok(search.best!.trainingDays >= 2);
 });
 
+test("новичку неделя не превращается в 'отработал в начале — отдыхай до конца'", () => {
+  // Живой баг с эмулятора: тяжёлый, лёгкий и пять дней отдыха.
+  const best = searchPlans(request({ startState: ZERO_STATE, historyDays: 0 })).best!;
+  assert.ok(best.trainingDays >= 3, `тренировок ${best.trainingDays}`);
+  const lastThree = best.sizes.slice(4);
+  assert.ok(lastThree.some((size) => size !== "rest"), `хвост недели: ${lastThree.join(",")}`);
+});
+
+test("не больше заданного числа тренировок", () => {
+  const constraints = { ...DEFAULT_CONSTRAINTS, maxTrainingDays: 3 };
+  const search = searchPlans(request({ constraints }));
+  assert.ok(search.best!.trainingDays <= 3);
+  assert.ok(search.pruned.tooManyDays > 0);
+});
+
 test("с трёх недель истории потолок ACWR включается", () => {
   const fresh = searchPlans(request({ historyDays: 0 }));
   const seasoned = searchPlans(request({ historyDays: 60 }));

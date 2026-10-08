@@ -20,6 +20,7 @@ const PRUNE_LABELS = {
   ramp: "load ramp above your ceiling",
   backToBack: "two hard days in a row",
   tooFewDays: "too few training days",
+  tooManyDays: "more sessions than you allow",
   fitnessDrop: "too much fitness lost before the target day",
 } as const;
 
@@ -60,7 +61,7 @@ export default function ExplainScreen() {
 
   const binding = bindingConstraint(week.search);
   const pruned = week.search.pruned;
-  const totalPruned = pruned.ramp + pruned.backToBack + pruned.tooFewDays + pruned.fitnessDrop;
+  const totalPruned = pruned.ramp + pruned.backToBack + pruned.tooFewDays + pruned.tooManyDays + pruned.fitnessDrop;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>

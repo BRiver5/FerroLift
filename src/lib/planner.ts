@@ -37,6 +37,12 @@ export type PlanConstraints = {
   /** Дни, зафиксированные пользователем вручную (дата → размер). */
   locked: Record<string, SessionSize>;
   minTrainingDays: number;
+  /**
+   * Не больше стольких тренировок в неделю. Без этого честная максимизация
+   * готовности приходит к "тренируйся каждый день" — формально лучше, по
+   * жизни нет.
+   */
+  maxTrainingDays: number;
   /** В режиме пика — насколько можно потерять готовность ради свежести, %. */
   maxFitnessDropPct: number;
 };
@@ -47,6 +53,7 @@ export const DEFAULT_CONSTRAINTS: PlanConstraints = {
   availableWeekdays: [0, 1, 2, 3, 4, 5, 6],
   locked: {},
   minTrainingDays: 2,
+  maxTrainingDays: 4,
   maxFitnessDropPct: 6,
 };
 
@@ -85,7 +92,7 @@ export type PlanDay = {
 
 export type ScoreTerm = { label: string; value: number; note: string };
 
-export type Violation = { date: string | null; kind: "ramp" | "back-to-back" | "unavailable" | "too-few-days" | "fitness-drop"; message: string };
+export type Violation = { date: string | null; kind: "ramp" | "back-to-back" | "unavailable" | "too-few-days" | "too-many-days" | "fitness-drop"; message: string };
 
 export type Plan = {
   sizes: SessionSize[];
@@ -104,7 +111,7 @@ export type Plan = {
   violations: Violation[];
 };
 
-export type PruneCounts = { ramp: number; backToBack: number; tooFewDays: number; fitnessDrop: number };
+export type PruneCounts = { ramp: number; backToBack: number; tooFewDays: number; tooManyDays: number; fitnessDrop: number };
 
 export type PlanSearch = {
   best: Plan | null;
@@ -178,6 +185,14 @@ export function evaluatePlan(request: PlanRequest, sizes: SessionSize[]): Plan {
     });
   }
 
+  if (trainingDays > request.constraints.maxTrainingDays) {
+    violations.push({
+      date: null,
+      kind: "too-many-days",
+      message: `${trainingDays} training days, your limit is ${request.constraints.maxTrainingDays}`,
+    });
+  }
+
   const startFitness = request.startState.fitness;
   const terms: ScoreTerm[] = [];
   const mono = monotony(loads);
@@ -194,9 +209,19 @@ export function evaluatePlan(request: PlanRequest, sizes: SessionSize[]): Plan {
     terms.push({ label: "Form on the target day", value: targetForm, note: "fitness minus fatigue on the day that matters" });
     terms.push({ label: "Fitness kept", value: 0.25 * targetFitness, note: "a quarter weight — freshness without detraining" });
   } else {
-    terms.push({ label: "Fitness at the end", value: state.fitness, note: "what the week adds to your 42-day base" });
-    const leftover = Math.max(0, -formOf(state));
-    terms.push({ label: "Fatigue carried over", value: -0.5 * leftover, note: "half of any negative form at the end of the week" });
+    // Режим роста оценивает неделю как ПОВТОРЯЮЩИЙСЯ шаблон: тот же рисунок
+    // прогоняется четыре недели подряд, и берутся СРЕДНИЕ готовность и форма
+    // за последнюю. Первая версия смотрела на последний день единственной
+    // недели — и на эмуляторе новичку выпадало "тяжёлый, лёгкий, пять дней
+    // отдыха": свежесть в последний день перевешивала три лишние тренировки.
+    // Среднее по неделе не зависит от того, каким днём неделя кончается, и
+    // отдых в хвосте больше ничего не выигрывает.
+    const steady = steadyState(request, sizes);
+    terms.push({ label: "Fitness this pattern builds", value: steady.fitness, note: "average fitness in week 4 if you kept this week up" });
+    // Отрицательная форма в фазе набора — норма. Штраф начинается там, где
+    // средняя усталость превышает четверть готовности.
+    const excess = Math.max(0, -steady.form - 0.25 * steady.fitness);
+    terms.push({ label: "Fatigue beyond a normal build", value: -0.5 * excess, note: "half of the average negative form below −25% of fitness" });
   }
   const monotonyPenalty = -Math.max(0, mono - 1.5) * request.base * 0.04;
   terms.push({ label: "Monotony", value: monotonyPenalty, note: `same load every day is penalised above 1.5 (this week ${mono > 50 ? "flat" : mono.toFixed(2)})` });
@@ -220,12 +245,32 @@ export function evaluatePlan(request: PlanRequest, sizes: SessionSize[]): Plan {
   };
 }
 
+const STEADY_WEEKS = 4;
+
+/** Средние готовность и форма за последнюю из четырёх повторённых недель. */
+export function steadyState(request: PlanRequest, sizes: SessionSize[]): { fitness: number; form: number } {
+  let state = request.startState;
+  let fitnessSum = 0;
+  let formSum = 0;
+  const days = sizes.length;
+  for (let week = 0; week < STEADY_WEEKS; week++) {
+    for (let i = 0; i < days; i++) {
+      state = step(state, Math.round(request.base * SIZE_FACTOR[sizes[i] ?? "rest"]));
+      if (week === STEADY_WEEKS - 1) {
+        fitnessSum += state.fitness;
+        formSum += formOf(state);
+      }
+    }
+  }
+  return { fitness: fitnessSum / Math.max(1, days), form: formSum / Math.max(1, days) };
+}
+
 const KEEP_ALTERNATIVES = 4;
 
 /** Перебор всех допустимых недель с отсечением ветвей. */
 export function searchPlans(request: PlanRequest): PlanSearch {
   const dates = dayRange(request.start, request.days);
-  const pruned: PruneCounts = { ramp: 0, backToBack: 0, tooFewDays: 0, fitnessDrop: 0 };
+  const pruned: PruneCounts = { ramp: 0, backToBack: 0, tooFewDays: 0, tooManyDays: 0, fitnessDrop: 0 };
   const top: Plan[] = [];
   let evaluated = 0;
 
@@ -267,6 +312,10 @@ export function searchPlans(request: PlanRequest): PlanSearch {
     const options: SessionSize[] = locked ? [locked] : isAvailable(request, date) ? SIZES_DESC : ["rest"];
 
     for (const size of options) {
+      if (size !== "rest" && !locked && trainingDays >= request.constraints.maxTrainingDays) {
+        pruned.tooManyDays += 1;
+        continue;
+      }
       if (!request.constraints.allowBackToBackHard && size === "hard" && sizes[index - 1] === "hard" && !locked) {
         pruned.backToBack += 1;
         continue;

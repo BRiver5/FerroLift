@@ -86,8 +86,14 @@ export default function SettingsScreen() {
             <Text style={{ ...theme.typography.caption, color: theme.colors.inkMuted, marginTop: theme.spacing.md, marginBottom: 6 }}>At least this many sessions a week</Text>
             <Segmented
               value={c.minTrainingDays}
-              onChange={(value) => store.updateConstraints({ minTrainingDays: value })}
+              onChange={(value) => store.updateConstraints({ minTrainingDays: value, maxTrainingDays: Math.max(value, c.maxTrainingDays) })}
               options={[1, 2, 3, 4, 5].map((n) => ({ value: n, label: String(n) }))}
+            />
+            <Text style={{ ...theme.typography.caption, color: theme.colors.inkMuted, marginTop: theme.spacing.md, marginBottom: 6 }}>And at most</Text>
+            <Segmented
+              value={c.maxTrainingDays}
+              onChange={(value) => store.updateConstraints({ maxTrainingDays: Math.max(value, c.minTrainingDays) })}
+              options={[2, 3, 4, 5, 6].map((n) => ({ value: n, label: String(n) }))}
             />
           </View>
         </Appear>

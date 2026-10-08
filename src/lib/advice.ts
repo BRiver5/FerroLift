@@ -158,7 +158,7 @@ export function suggestFixes(request: PlanRequest, current: PlanSearch): Fix[] {
 /** Человеческое объяснение, почему перебор ничего не нашёл. */
 export function explainInfeasible(search: PlanSearch, request: PlanRequest): string {
   const { pruned } = search;
-  const total = pruned.ramp + pruned.backToBack + pruned.tooFewDays + pruned.fitnessDrop;
+  const total = pruned.ramp + pruned.backToBack + pruned.tooFewDays + pruned.tooManyDays + pruned.fitnessDrop;
   if (total === 0) return "No week fits the days you train.";
   const top = (Object.entries(pruned) as [keyof typeof pruned, number][]).sort((a, b) => b[1] - a[1])[0];
   switch (top[0]) {
@@ -168,6 +168,8 @@ export function explainInfeasible(search: PlanSearch, request: PlanRequest): str
       return "The only way to fit the sessions in is two hard days in a row.";
     case "tooFewDays":
       return `You can't reach ${request.constraints.minTrainingDays} training days on the days you marked as available.`;
+    case "tooManyDays":
+      return `Every week that works needs more than your ${request.constraints.maxTrainingDays} sessions.`;
     case "fitnessDrop":
       return `Getting fresh for the target day costs more fitness than the ${request.constraints.maxFitnessDropPct}% you allow.`;
   }

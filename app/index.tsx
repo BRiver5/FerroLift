@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useKeyboardHeight } from "../src/components/useKeyboardHeight";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BarChart3, CalendarRange, CircleAlert, CornerDownLeft, Gauge, Settings as SettingsIcon, Timer } from "lucide-react-native";
@@ -33,6 +34,7 @@ export default function ConsoleScreen() {
   const store = useAppStore();
   const { ready, lifts, sessions, sets, strength, settings } = store;
   const scrollRef = useRef<ScrollView>(null);
+  const keyboard = useKeyboardHeight();
 
   const [line, setLine] = useState("");
   const [metaOpen, setMetaOpen] = useState(false);
@@ -219,7 +221,7 @@ export default function ConsoleScreen() {
   const zone = rampActive ? zoneOf(now?.acwr ?? null) : null;
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.colors.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+<View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <View style={{ paddingTop: insets.top + theme.spacing.sm, paddingHorizontal: theme.spacing.lg, paddingBottom: theme.spacing.sm, backgroundColor: theme.colors.background }}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <Text style={{ ...theme.typography.title, color: theme.colors.ink }}>FerroLift</Text>
@@ -268,7 +270,8 @@ export default function ConsoleScreen() {
           borderTopColor: theme.colors.border,
           backgroundColor: theme.colors.backgroundAlt,
           paddingTop: theme.spacing.sm,
-          paddingBottom: insets.bottom + theme.spacing.sm,
+          // С открытой клавиатурой отступ — её высота, без неё — системная полоса.
+          paddingBottom: (keyboard > 0 ? keyboard : insets.bottom) + theme.spacing.sm,
         }}
       >
         {presets.length > 0 && !line ? (
@@ -408,7 +411,7 @@ export default function ConsoleScreen() {
         ) : null}
       </Sheet>
 
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

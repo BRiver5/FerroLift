@@ -55,6 +55,8 @@ type State = {
   forgetStrength: () => Promise<void>;
 };
 
+let weekCache: { key: unknown[]; today: string; value: WeekPlan } | null = null;
+
 export const useAppStore = create<State>((set, get) => ({
   ready: false,
   lifts: [],
@@ -92,7 +94,19 @@ export const useAppStore = create<State>((set, get) => ({
     };
   },
 
-  week: () => planWeek(get().input()),
+  // Перебор недели — десятки миллисекунд на десктопе и заметно дольше на
+  // телефоне, а его спрашивают четыре экрана. Кэш по ССЫЛКАМ на входные
+  // данные: стор всегда заменяет массивы при изменении, поэтому совпадение
+  // ссылок = совпадение данных. Дата тоже часть ключа — в полночь план другой.
+  week: () => {
+    const { lifts, sessions, sets, strength, settings, overrides } = get();
+    const key = [lifts, sessions, sets, strength, settings, overrides];
+    const today = todayIso();
+    if (weekCache && weekCache.today === today && weekCache.key.every((item, i) => item === key[i])) return weekCache.value;
+    const value = planWeek(get().input());
+    weekCache = { key, today, value };
+    return value;
+  },
 
   logSets: async (date, lift, entries) => {
     const { sessions, sets, strength, settings } = get();
