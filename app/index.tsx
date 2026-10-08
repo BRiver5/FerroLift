@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { useKeyboardHeight } from "../src/components/useKeyboardHeight";
+import Animated, { useAnimatedKeyboard, useAnimatedStyle } from "react-native-reanimated";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BarChart3, CalendarRange, CircleAlert, CornerDownLeft, Gauge, Settings as SettingsIcon, Timer } from "lucide-react-native";
@@ -34,7 +34,16 @@ export default function ConsoleScreen() {
   const store = useAppStore();
   const { ready, lifts, sessions, sets, strength, settings } = store;
   const scrollRef = useRef<ScrollView>(null);
-  const keyboard = useKeyboardHeight();
+  // Высота клавиатуры с UI-потока Reanimated. Два предыдущих способа на
+  // эмуляторе (Expo SDK 54, edge-to-edge) не сработали: KeyboardAvoidingView
+  // прятал строку ввода под клавиатуру, а события Keyboard.addListener не
+  // поднимали её вовсе. useAnimatedKeyboard читает инсеты окна напрямую.
+  const keyboard = useAnimatedKeyboard();
+  const restPadding = insets.bottom + theme.spacing.sm;
+  const openPadding = theme.spacing.sm;
+  const inputBarStyle = useAnimatedStyle(() => ({
+    paddingBottom: keyboard.height.value > 0 ? keyboard.height.value + openPadding : restPadding,
+  }));
 
   const [line, setLine] = useState("");
   const [metaOpen, setMetaOpen] = useState(false);
@@ -268,15 +277,16 @@ export default function ConsoleScreen() {
       </ScrollView>
 
       {/* --- строка ввода --- */}
-      <View
-        style={{
-          borderTopWidth: 1,
-          borderTopColor: theme.colors.border,
-          backgroundColor: theme.colors.backgroundAlt,
-          paddingTop: theme.spacing.sm,
-          // С открытой клавиатурой отступ — её высота, без неё — системная полоса.
-          paddingBottom: (keyboard > 0 ? keyboard : insets.bottom) + theme.spacing.sm,
-        }}
+      <Animated.View
+        style={[
+          {
+            borderTopWidth: 1,
+            borderTopColor: theme.colors.border,
+            backgroundColor: theme.colors.backgroundAlt,
+            paddingTop: theme.spacing.sm,
+          },
+          inputBarStyle,
+        ]}
       >
         {presets.length > 0 && !line ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: theme.spacing.lg, gap: theme.spacing.sm }}>
@@ -341,7 +351,7 @@ export default function ConsoleScreen() {
             <CornerDownLeft size={18} color={theme.colors.onAccent} />
           </PressableScale>
         </View>
-      </View>
+      </Animated.View>
 
       <Sheet
         visible={metaOpen}
