@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { step, ZERO_STATE, type LoadState } from "./load.ts";
-import { DEFAULT_CONSTRAINTS, evaluatePlan, searchPlans, SIZE_FACTOR, type PlanRequest } from "./planner.ts";
+import { DEFAULT_CONSTRAINTS, evaluatePlan, searchPlans, SIZE_FACTOR, steadyState, type PlanRequest } from "./planner.ts";
 import type { SessionSize } from "./model.ts";
 
 /** Состояние человека, который месяц тренировался ~3 раза в неделю по 350. */
@@ -59,7 +59,9 @@ test("перебор не хуже жадного 'каждый день сам�
   const greedy: SessionSize[] = [];
   for (let i = 0; i < 7; i++) {
     let chosen: SessionSize = "rest";
-    for (const size of ["hard", "moderate", "light"] as SessionSize[]) {
+    // Те же правила, что у перебора: лимит тренировок в неделю тоже.
+    const used = greedy.filter((size) => size !== "rest").length;
+    for (const size of (used >= req.constraints.maxTrainingDays ? [] : ["hard", "moderate", "light"]) as SessionSize[]) {
       if (size === "hard" && greedy[i - 1] === "hard") continue;
       const next = step(state, req.base * SIZE_FACTOR[size]);
       const acwr = next.chronic < 1 ? null : next.acute / next.chronic;
@@ -72,6 +74,7 @@ test("перебор не хуже жадного 'каждый день сам�
     state = step(state, req.base * SIZE_FACTOR[chosen]);
   }
   const greedyPlan = evaluatePlan(req, greedy);
+  assert.deepEqual(greedyPlan.violations, [], "жадный вариант играет по тем же правилам");
   const best = searchPlans(req).best!;
   assert.ok(best.score >= greedyPlan.score - 1e-9, `${best.score} против жадного ${greedyPlan.score}`);
 });
@@ -119,6 +122,14 @@ test("новичку неделя не превращается в 'отрабо
   assert.ok(lastThree.some((size) => size !== "rest"), `хвост недели: ${lastThree.join(",")}`);
 });
 
+test("пока база не набрана, тяжёлых дней нет — только после трёх недель", () => {
+  const novice = searchPlans(request({ startState: ZERO_STATE, historyDays: 0 })).best!;
+  assert.ok(!novice.sizes.includes("hard"), novice.sizes.join(","));
+  // На 18-й день истории последние дни недели уже за порогом — там тяжёлый можно.
+  const almost = searchPlans(request({ historyDays: 18 })).best!;
+  assert.ok(almost.sizes.slice(0, 3).every((size) => size !== "hard"));
+});
+
 test("не больше заданного числа тренировок", () => {
   const constraints = { ...DEFAULT_CONSTRAINTS, maxTrainingDays: 3 };
   const search = searchPlans(request({ constraints }));
@@ -147,4 +158,16 @@ test("оценка ручной недели перечисляет наруше
   assert.ok(plan.terms.length >= 3);
   const sum = plan.terms.reduce((acc, term) => acc + term.value, 0);
   assert.ok(Math.abs(sum - plan.score) < 1e-9, "балл — ровно сумма слагаемых");
+});
+
+test("установившаяся готовность не зависит от порядка дней — только от объёма", () => {
+  // Свойство, ради которого цель считается в периодическом режиме: перестановка
+  // тех же тренировок не меняет среднюю готовность, меняет только провалы.
+  const req = request();
+  const a = steadyState(req, ["moderate", "moderate", "moderate", "moderate", "rest", "rest", "rest"]);
+  const b = steadyState(req, ["moderate", "rest", "moderate", "rest", "moderate", "rest", "moderate"]);
+  assert.ok(Math.abs(a.fitness - b.fitness) < 1e-6, `${a.fitness} vs ${b.fitness}`);
+  assert.ok(a.peakFatigue > b.peakFatigue, "скученные тренировки дают более высокий пик усталости");
+  // Средняя готовность = средняя суточная нагрузка (единичный коэффициент усиления фильтра).
+  assert.ok(Math.abs(a.fitness - (4 * 350) / 7) < 1e-6);
 });

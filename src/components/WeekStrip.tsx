@@ -9,7 +9,7 @@ import { spring } from "../theme/motion";
 import { weekdayShort } from "../lib/dates.ts";
 import { SIZE_LABELS, type SessionSize } from "../lib/model.ts";
 import { zoneOf } from "../lib/load.ts";
-import type { PlanDay } from "../lib/planner.ts";
+import { RAMP_MIN_HISTORY_DAYS, type PlanDay } from "../lib/planner.ts";
 import { haptics } from "../services/haptics";
 
 const LEVELS: SessionSize[] = ["rest", "light", "moderate", "hard"];
@@ -31,18 +31,21 @@ const STEP_PX = 26;
  */
 export function WeekStrip({
   days,
+  historyDays,
   onCommit,
   onUnlock,
 }: {
   days: PlanDay[];
+  /** Дней истории на начало недели — до трёх недель зоны ACWR не красятся. */
+  historyDays: number;
   onCommit: (date: string, size: SessionSize) => void;
   onUnlock: (date: string) => void;
 }) {
   const theme = useTheme();
   return (
     <View style={{ flexDirection: "row", gap: theme.spacing.xs }}>
-      {days.map((day) => (
-        <DayColumn key={day.date} day={day} onCommit={onCommit} onUnlock={onUnlock} />
+      {days.map((day, index) => (
+        <DayColumn key={day.date} day={day} rampActive={historyDays + index >= RAMP_MIN_HISTORY_DAYS} onCommit={onCommit} onUnlock={onUnlock} />
       ))}
     </View>
   );
@@ -50,10 +53,12 @@ export function WeekStrip({
 
 function DayColumn({
   day,
+  rampActive,
   onCommit,
   onUnlock,
 }: {
   day: PlanDay;
+  rampActive: boolean;
   onCommit: (date: string, size: SessionSize) => void;
   onUnlock: (date: string) => void;
 }) {
@@ -128,7 +133,9 @@ function DayColumn({
   const columnStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + lifted.value * 0.06 }] }));
 
   const size = LEVELS[preview];
-  const zone = zoneOf(day.acwr);
+  // Пока база не набрана, отношение 3.6 у новичка — не тревога, а
+  // арифметика пустого 28-дневного среднего. Красить его красным — пугать зря.
+  const zone = rampActive ? zoneOf(day.acwr) : null;
   const fill = size === "rest" ? "transparent" : sizeColors[size];
 
   return (
@@ -173,7 +180,7 @@ function DayColumn({
             }}
           />
           <Text style={{ ...theme.typography.caption, fontSize: 10, color: theme.colors.inkFaint }}>
-            {day.acwr === null ? "—" : day.acwr.toFixed(2)}
+            {day.acwr === null || !rampActive ? "—" : day.acwr.toFixed(2)}
           </Text>
         </View>
       </Animated.View>

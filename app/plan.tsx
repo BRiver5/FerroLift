@@ -115,13 +115,14 @@ export default function PlanScreen() {
             {plan ? (
               <WeekStrip
                 days={plan.days}
+                historyDays={snap.request.historyDays}
                 onCommit={(date, size) => store.lockDay(date, size)}
                 onUnlock={(date) => store.lockDay(date, null)}
               />
             ) : null}
             <Text style={{ ...theme.typography.caption, fontSize: 11, color: theme.colors.inkFaint, marginTop: theme.spacing.sm }}>
               Drag a day up or down to set it yourself, tap to cycle, hold to hand it back. The other days are re-planned around
-              whatever you pin.
+              whatever you pin.{rampActive ? "" : " Hard days unlock after three weeks of history — the base comes first."}
             </Text>
           </View>
         </Appear>

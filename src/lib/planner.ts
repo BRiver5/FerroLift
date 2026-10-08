@@ -14,7 +14,7 @@
 // показывает: что дал каждый член, а не один итоговый балл.
 
 import { addDays, dayRange, weekdayIndex } from "./dates.ts";
-import { acwrOf, formOf, monotony, step, type LoadState } from "./load.ts";
+import { acwrOf, formOf, monotony, step, TAU_FATIGUE, TAU_FITNESS, type LoadState } from "./load.ts";
 import type { SessionSize } from "./model.ts";
 
 export const SIZE_FACTOR: Record<SessionSize, number> = {
@@ -217,11 +217,19 @@ export function evaluatePlan(request: PlanRequest, sizes: SessionSize[]): Plan {
     // Среднее по неделе не зависит от того, каким днём неделя кончается, и
     // отдых в хвосте больше ничего не выигрывает.
     const steady = steadyState(request, sizes);
-    terms.push({ label: "Fitness this pattern builds", value: steady.fitness, note: "average fitness in week 4 if you kept this week up" });
-    // Отрицательная форма в фазе набора — норма. Штраф начинается там, где
-    // средняя усталость превышает четверть готовности.
-    const excess = Math.max(0, -steady.form - 0.25 * steady.fitness);
-    terms.push({ label: "Fatigue beyond a normal build", value: -0.5 * excess, note: "half of the average negative form below −25% of fitness" });
+    terms.push({ label: "Fitness this pattern builds", value: steady.fitness, note: "average fitness if this week were kept up — equals average daily load" });
+    // В установившемся режиме средняя форма всегда ноль, поэтому мерилом
+    // перегруза служит ПРОВАЛ формы внутри недели. Провал до −25% готовности —
+    // нормальная фаза набора; глубже — штраф.
+    const excess = Math.max(0, -steady.minForm - 0.25 * steady.fitness);
+    terms.push({ label: "Deepest dip below a normal build", value: -0.5 * excess, note: "half of the lowest form below −25% of fitness" });
+    // Пик усталости над её средним — мера скученности тренировок при том же
+    // объёме: четыре подряд и через день отличаются только этим.
+    terms.push({
+      label: "Sessions bunched together",
+      value: -0.2 * (steady.peakFatigue - steady.fatigue),
+      note: "how far fatigue peaks above its own average — spread sessions recover between",
+    });
   }
   const monotonyPenalty = -Math.max(0, mono - 1.5) * request.base * 0.04;
   terms.push({ label: "Monotony", value: monotonyPenalty, note: `same load every day is penalised above 1.5 (this week ${mono > 50 ? "flat" : mono.toFixed(2)})` });
@@ -245,24 +253,55 @@ export function evaluatePlan(request: PlanRequest, sizes: SessionSize[]): Plan {
   };
 }
 
-const STEADY_WEEKS = 4;
+/**
+ * ПЕРИОДИЧЕСКИЙ установившийся режим недельного шаблона — считается
+ * аналитически, а не прогоном.
+ *
+ * Готовность и усталость — фильтры первого порядка x' = a·x + k·u. Если
+ * неделю повторять бесконечно, найдётся состояние x₀, в которое неделя
+ * возвращает систему сама:
+ *   x₀ = Σ a^(P−j)·k·u_j / (1 − a^P).
+ * Из него один прогон недели даёт точный установившийся цикл.
+ *
+ * Первая версия гоняла шаблон четыре недели подряд, но при постоянной
+ * готовности 42 дня система за 28 дней ещё не выходит на режим, и ранние
+ * дни недели весили больше поздних — планировщик снова сваливал всё в начало
+ * (видно на эмуляторе: "средняя, средняя, средняя, отдых…"). В периодическом
+ * режиме средняя готовность равна среднему объёму, и ПОРЯДОК дней на неё не
+ * влияет вообще: расстановку оценивают только провал формы и скученность.
+ */
+function periodicStart(loads: number[], k: number): number {
+  const a = 1 - k;
+  const P = loads.length;
+  let sum = 0;
+  for (let j = 0; j < P; j++) sum += Math.pow(a, P - 1 - j) * k * loads[j];
+  const denom = 1 - Math.pow(a, P);
+  return denom > 1e-12 ? sum / denom : 0;
+}
 
-/** Средние готовность и форма за последнюю из четырёх повторённых недель. */
-export function steadyState(request: PlanRequest, sizes: SessionSize[]): { fitness: number; form: number } {
-  let state = request.startState;
+export function steadyState(
+  request: PlanRequest,
+  sizes: SessionSize[]
+): { fitness: number; minForm: number; fatigue: number; peakFatigue: number } {
+  const loads = sizes.map((size) => Math.round(request.base * SIZE_FACTOR[size ?? "rest"]));
+  const kFit = 1 - Math.exp(-1 / TAU_FITNESS);
+  const kFat = 1 - Math.exp(-1 / TAU_FATIGUE);
+  let fitness = periodicStart(loads, kFit);
+  let fatigue = periodicStart(loads, kFat);
   let fitnessSum = 0;
-  let formSum = 0;
-  const days = sizes.length;
-  for (let week = 0; week < STEADY_WEEKS; week++) {
-    for (let i = 0; i < days; i++) {
-      state = step(state, Math.round(request.base * SIZE_FACTOR[sizes[i] ?? "rest"]));
-      if (week === STEADY_WEEKS - 1) {
-        fitnessSum += state.fitness;
-        formSum += formOf(state);
-      }
-    }
+  let fatigueSum = 0;
+  let peakFatigue = 0;
+  let minForm = Number.POSITIVE_INFINITY;
+  for (const load of loads) {
+    fitness += kFit * (load - fitness);
+    fatigue += kFat * (load - fatigue);
+    fitnessSum += fitness;
+    fatigueSum += fatigue;
+    peakFatigue = Math.max(peakFatigue, fatigue);
+    minForm = Math.min(minForm, fitness - fatigue);
   }
-  return { fitness: fitnessSum / Math.max(1, days), form: formSum / Math.max(1, days) };
+  const n = Math.max(1, loads.length);
+  return { fitness: fitnessSum / n, minForm: Number.isFinite(minForm) ? minForm : 0, fatigue: fatigueSum / n, peakFatigue };
 }
 
 const KEEP_ALTERNATIVES = 4;
@@ -309,7 +348,13 @@ export function searchPlans(request: PlanRequest): PlanSearch {
 
     const date = dates[index];
     const locked = request.constraints.locked[date];
-    const options: SessionSize[] = locked ? [locked] : isAvailable(request, date) ? SIZES_DESC : ["rest"];
+    // Пока база не набрана (меньше трёх недель истории), тяжёлых дней нет:
+    // потолок ACWR ещё не работает, и без этого правила новичку на эмуляторе
+    // выпадали три тяжёлые тренировки в первую же неделю. Сначала база,
+    // потом интенсивность. Зафиксированный вручную тяжёлый день допускается.
+    const baselinePhase = request.historyDays + index < RAMP_MIN_HISTORY_DAYS;
+    const sizesHere = baselinePhase ? SIZES_DESC.filter((size) => size !== "hard") : SIZES_DESC;
+    const options: SessionSize[] = locked ? [locked] : isAvailable(request, date) ? sizesHere : ["rest"];
 
     for (const size of options) {
       if (size !== "rest" && !locked && trainingDays >= request.constraints.maxTrainingDays) {
