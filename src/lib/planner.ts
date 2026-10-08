@@ -13,7 +13,7 @@
 // Цель задаётся явно и раскладывается на слагаемые — экран "почему" их
 // показывает: что дал каждый член, а не один итоговый балл.
 
-import { addDays, dayRange, weekdayIndex } from "./dates.ts";
+import { addDays, dayRange, formatShort, weekdayIndex, weekdayShort } from "./dates.ts";
 import { acwrOf, formOf, monotony, step, TAU_FATIGUE, TAU_FITNESS, type LoadState } from "./load.ts";
 import type { SessionSize } from "./model.ts";
 
@@ -124,6 +124,11 @@ export type PlanSearch = {
   targetOutOfRange: boolean;
 };
 
+/** "Fri Oct 9" вместо "2026-10-09" — сообщения читает человек. */
+function human(date: string): string {
+  return `${weekdayShort(date)} ${formatShort(date)}`;
+}
+
 function isAvailable(request: PlanRequest, date: string): boolean {
   return request.constraints.availableWeekdays.includes(weekdayIndex(date));
 }
@@ -160,14 +165,18 @@ export function evaluatePlan(request: PlanRequest, sizes: SessionSize[]): Plan {
     });
 
     if (size !== "rest" && !isAvailable(request, date) && request.constraints.locked[date] === undefined) {
-      violations.push({ date, kind: "unavailable", message: `${date} is not a training day for you` });
+      violations.push({ date, kind: "unavailable", message: `${human(date)} is not one of your training days` });
     }
     const rampActive = request.historyDays + index >= RAMP_MIN_HISTORY_DAYS;
     if (rampActive && acwr !== null && size !== "rest" && acwr > request.constraints.acwrCap) {
-      violations.push({ date, kind: "ramp", message: `load jumps to ${acwr.toFixed(2)}× your usual on ${date}` });
+      // "1.30× при потолке 1.3" читается как "не нарушение" — на деле 1.3004.
+      // Когда превышение меньше сотой, это так и сказано.
+      const over = acwr - request.constraints.acwrCap;
+      const amount = over < 0.01 ? `just above your ${request.constraints.acwrCap.toFixed(1)}× ceiling` : `${acwr.toFixed(2)}× your usual`;
+      violations.push({ date, kind: "ramp", message: `${human(date)}: load jumps to ${amount}` });
     }
     if (!request.constraints.allowBackToBackHard && index > 0 && size === "hard" && sizes[index - 1] === "hard") {
-      violations.push({ date, kind: "back-to-back", message: `two hard days in a row ending ${date}` });
+      violations.push({ date, kind: "back-to-back", message: `two hard days in a row ending ${human(date)}` });
     }
     if (request.target.kind === "peak" && date === request.target.date) {
       targetForm = formOf(state);
