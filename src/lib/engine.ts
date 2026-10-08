@@ -2,7 +2,7 @@
 // Экраны разговаривают только с этим файлом, чтобы порядок звеньев не
 // повторялся в каждом компоненте.
 
-import { addDays, todayIso } from "./dates.ts";
+import { addDays, diffDays, todayIso } from "./dates.ts";
 import {
   dailyLoads,
   sessionLoad,
@@ -83,6 +83,8 @@ export function snapshot(input: EngineInput): Snapshot {
   const history = points.slice(-HISTORY_DAYS);
 
   const base = typicalSessionLoad(loads);
+  const firstDate = loads.reduce<string | null>((first, item) => (first === null || item.date < first ? item.date : first), null);
+  const historyDays = firstDate ? Math.max(0, diffDays(firstDate, start)) : 0;
 
   return {
     today,
@@ -96,6 +98,7 @@ export function snapshot(input: EngineInput): Snapshot {
       start,
       days: input.settings.horizonDays,
       startState: end,
+      historyDays,
       base,
       target: input.settings.target,
       constraints: input.settings.constraints,

@@ -50,10 +50,22 @@ export const DEFAULT_CONSTRAINTS: PlanConstraints = {
   maxFitnessDropPct: 6,
 };
 
+/**
+ * Сколько дней истории нужно, чтобы потолок ACWR вообще имел смысл. Пока
+ * 28-дневное среднее не набралось, отношение "острая / хроническая" после
+ * первой же тренировки новичка улетает за 3 — и перебор запрещал ему вторую
+ * тренировку в неделю. Это поймал тест, а не пользователь: правило ACWR
+ * включается только с трёх недель истории, до этого число показывается, но
+ * неделю не режет.
+ */
+export const RAMP_MIN_HISTORY_DAYS = 21;
+
 export type PlanRequest = {
   start: string;
   days: number;
   startState: LoadState;
+  /** Сколько дней прошло от первой записанной тренировки до начала плана. */
+  historyDays: number;
   /** Нагрузка "средней" тренировки — множители размеров считаются от неё. */
   base: number;
   target: PlanTarget;
@@ -143,7 +155,8 @@ export function evaluatePlan(request: PlanRequest, sizes: SessionSize[]): Plan {
     if (size !== "rest" && !isAvailable(request, date) && request.constraints.locked[date] === undefined) {
       violations.push({ date, kind: "unavailable", message: `${date} is not a training day for you` });
     }
-    if (acwr !== null && size !== "rest" && acwr > request.constraints.acwrCap) {
+    const rampActive = request.historyDays + index >= RAMP_MIN_HISTORY_DAYS;
+    if (rampActive && acwr !== null && size !== "rest" && acwr > request.constraints.acwrCap) {
       violations.push({ date, kind: "ramp", message: `load jumps to ${acwr.toFixed(2)}× your usual on ${date}` });
     }
     if (!request.constraints.allowBackToBackHard && index > 0 && size === "hard" && sizes[index - 1] === "hard") {
@@ -260,7 +273,8 @@ export function searchPlans(request: PlanRequest): PlanSearch {
       }
       const next = step(state, Math.round(request.base * SIZE_FACTOR[size]));
       const acwr = acwrOf(next);
-      if (size !== "rest" && acwr !== null && acwr > request.constraints.acwrCap && !locked) {
+      const rampActive = request.historyDays + index >= RAMP_MIN_HISTORY_DAYS;
+      if (rampActive && size !== "rest" && acwr !== null && acwr > request.constraints.acwrCap && !locked) {
         pruned.ramp += 1;
         continue;
       }

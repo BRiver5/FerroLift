@@ -6,7 +6,7 @@
 // поэтому у каждой подсказки есть строка "чем платишь", а не только выигрыш.
 
 import { addDays, dayRange, weekdayIndex, weekdayName } from "./dates.ts";
-import { searchPlans, type PlanRequest, type PlanSearch } from "./planner.ts";
+import { evaluatePlan, searchPlans, type PlanRequest, type PlanSearch } from "./planner.ts";
 
 export type FixKind = "raise-cap" | "back-to-back" | "unlock-day" | "add-day" | "fewer-days" | "move-peak" | "allow-drop";
 
@@ -24,12 +24,20 @@ export type Fix = {
   patch: Partial<PlanRequest["constraints"]> & { peakDate?: string };
 };
 
-/** Насколько лучше должна стать неделя, чтобы ослабление вообще предлагать. */
-const WORTH_IT = 0.05;
+/**
+ * Порог "стоит ли предлагать": доля от того, что неделя ВООБЩЕ может дать
+ * относительно недели полного отдыха. Первая версия мерила 5% от абсолютного
+ * балла — но балл почти целиком состоит из 42-дневной базы, которую одна
+ * неделя сдвигает на единицы процентов, и полезные варианты (+17% к
+ * достижимому приросту) отбрасывались как "мелочь". Поймано тестом.
+ */
+const WORTH_IT = 0.1;
 
 export function suggestFixes(request: PlanRequest, current: PlanSearch): Fix[] {
   const baseline = current.best?.score ?? null;
   const fixes: Fix[] = [];
+  const restScore = evaluatePlan(request, Array.from({ length: request.days }, () => "rest" as const)).score;
+  const gainRange = baseline === null ? 1 : Math.max(1, baseline - restScore);
 
   const tryPatch = (
     kind: FixKind,
@@ -42,7 +50,7 @@ export function suggestFixes(request: PlanRequest, current: PlanSearch): Fix[] {
     if (!result.best) return;
     const unlocks = baseline === null;
     const delta = unlocks ? result.best.score : result.best.score - baseline;
-    if (!unlocks && delta <= Math.abs(baseline) * WORTH_IT) return;
+    if (!unlocks && delta <= gainRange * WORTH_IT) return;
     fixes.push({ kind, label, cost, score: result.best.score, delta, unlocks, patch });
   };
 
@@ -81,31 +89,43 @@ export function suggestFixes(request: PlanRequest, current: PlanSearch): Fix[] {
     );
   }
 
-  const unavailableInHorizon = dayRange(request.start, request.days).filter(
-    (date) => !c.availableWeekdays.includes(weekdayIndex(date))
-  );
-  const seenWeekdays = new Set<number>();
-  for (const date of unavailableInHorizon) {
-    const weekday = weekdayIndex(date);
-    if (seenWeekdays.has(weekday)) continue;
-    seenWeekdays.add(weekday);
-    const available = [...c.availableWeekdays, weekday].sort();
+  // Доступные тренировочные дни в горизонте и сколько не хватает до минимума.
+  const horizon = dayRange(request.start, request.days);
+  const availableInHorizon = horizon.filter((date) => c.availableWeekdays.includes(weekdayIndex(date))).length;
+  const shortfall = Math.max(1, c.minTrainingDays - availableInHorizon);
+
+  // Дни недели, которые можно добавить. Если не хватает двух дней, одиночные
+  // добавления ничего не разблокируют — перебираются ПАРЫ (тройки) дней, и
+  // предлагается лучшая комбинация, измеренная перезапуском планировщика.
+  const candidates = [...new Set(horizon.map(weekdayIndex))].filter((weekday) => !c.availableWeekdays.includes(weekday));
+  const combos = combinations(candidates, Math.min(shortfall, candidates.length));
+  let bestCombo: { days: number[]; score: number } | null = null;
+  for (const combo of combos) {
+    const available = [...c.availableWeekdays, ...combo].sort();
+    const result = searchPlans({ ...request, constraints: { ...c, availableWeekdays: available } });
+    if (result.best && (!bestCombo || result.best.score > bestCombo.score)) bestCombo = { days: combo, score: result.best.score };
+  }
+  if (bestCombo) {
+    const available = [...c.availableWeekdays, ...bestCombo.days].sort();
+    const names = bestCombo.days.map((day) => `${weekdayName(day)}s`).join(" and ");
     tryPatch(
       "add-day",
-      `Train on ${weekdayName(weekday)}s too`,
-      "one more day a week at the gym",
+      `Train on ${names} too`,
+      bestCombo.days.length === 1 ? "one more day a week at the gym" : `${bestCombo.days.length} more days a week at the gym`,
       { availableWeekdays: available },
       { ...request, constraints: { ...c, availableWeekdays: available } }
     );
   }
 
-  if (c.minTrainingDays > 1) {
+  // Принять меньше тренировок — сразу до того, что реально помещается.
+  const reachable = Math.max(1, Math.min(c.minTrainingDays - 1, availableInHorizon));
+  if (c.minTrainingDays > 1 && reachable < c.minTrainingDays) {
     tryPatch(
       "fewer-days",
-      `Accept ${c.minTrainingDays - 1} training day${c.minTrainingDays - 1 === 1 ? "" : "s"} this week`,
+      `Accept ${reachable} training day${reachable === 1 ? "" : "s"} this week`,
       "fewer sessions, slower progress",
-      { minTrainingDays: c.minTrainingDays - 1 },
-      { ...request, constraints: { ...c, minTrainingDays: c.minTrainingDays - 1 } }
+      { minTrainingDays: reachable },
+      { ...request, constraints: { ...c, minTrainingDays: reachable } }
     );
   }
 
@@ -151,4 +171,23 @@ export function explainInfeasible(search: PlanSearch, request: PlanRequest): str
     case "fitnessDrop":
       return `Getting fresh for the target day costs more fitness than the ${request.constraints.maxFitnessDropPct}% you allow.`;
   }
+}
+
+function combinations<T>(items: T[], size: number): T[][] {
+  if (size <= 0) return [[]];
+  if (size > items.length) return [];
+  const out: T[][] = [];
+  const walk = (start: number, picked: T[]) => {
+    if (picked.length === size) {
+      out.push([...picked]);
+      return;
+    }
+    for (let i = start; i < items.length; i++) {
+      picked.push(items[i]);
+      walk(i + 1, picked);
+      picked.pop();
+    }
+  };
+  walk(0, []);
+  return out;
 }
