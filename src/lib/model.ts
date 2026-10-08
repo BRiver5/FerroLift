@@ -36,7 +36,10 @@ export const LIFT_PRESETS: LiftPreset[] = [
   { key: "pullup", name: "Pull-up", group: "pull", kind: "compound", increment: 2.5, aliases: ["pullup", "pull-up", "pu", "chin", "chinup"], bodyweight: true },
   { key: "lat_pulldown", name: "Lat pulldown", group: "pull", kind: "accessory", increment: 2.5, aliases: ["lat", "pulldown", "lpd"] },
   { key: "face_pull", name: "Face pull", group: "pull", kind: "accessory", increment: 1, aliases: ["fp", "face pull", "facepull"] },
-  { key: "plank", name: "Weighted plank", group: "core", kind: "accessory", increment: 2.5, aliases: ["plank"], bodyweight: true },
+  // Планка была в пресетах и дала на эмуляторе "e1RM 119": изометрическое
+  // удержание прогонялось через формулу повторов. Заменена на движение с
+  // весом и повторами, к которому формула применима.
+  { key: "cable_crunch", name: "Cable crunch", group: "core", kind: "accessory", increment: 2.5, aliases: ["crunch", "cc", "cable crunch"] },
   { key: "hanging_raise", name: "Hanging leg raise", group: "core", kind: "accessory", increment: 1, aliases: ["hlr", "leg raise", "hanging"], bodyweight: true },
   { key: "ab_wheel", name: "Ab wheel", group: "core", kind: "accessory", increment: 1, aliases: ["ab", "wheel", "ab wheel"], bodyweight: true },
   { key: "curl", name: "Barbell curl", group: "arms", kind: "accessory", increment: 1, aliases: ["curl", "bc", "biceps"] },

@@ -63,8 +63,19 @@ export function setE1rm(load: number, reps: number, rpe: number | null): number 
   return load * (1 + eff / 30);
 }
 
+/**
+ * Можно ли вообще оценивать разовый максимум. Упражнения на пресс с
+ * собственным весом (подъёмы ног, ролик) — нет: "максимум подъёма ног с
+ * весом тела 75 кг" не значит ничего, и планировщик не должен назначать
+ * им вес.
+ */
+export function isEstimable(lift: Pick<Lift, "group" | "bodyweight">): boolean {
+  return !(lift.bodyweight && lift.group === "core");
+}
+
 /** Лучшая оценка среди подходов одной тренировки — наблюдение для модели. */
 export function sessionObservation(sets: SetEntry[], lift: Lift, bodyweight: number): number | null {
+  if (!isEstimable(lift)) return null;
   let best: number | null = null;
   for (const set of sets) {
     const value = setE1rm(systemWeight(set, lift, bodyweight), set.reps, set.rpe);

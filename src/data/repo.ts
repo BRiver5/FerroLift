@@ -10,7 +10,7 @@ import { LIFT_PRESETS, type Lift, type MuscleGroup, type Session, type SessionSi
 import { observeLift, sessionObservation, type StrengthModel } from "../lib/strength.ts";
 
 /** Упражнения, которые по умолчанию входят в программу — сбалансированный стартовый набор. */
-const DEFAULT_PROGRAM = ["squat", "bench", "deadlift", "row", "ohp", "pullup", "rdl", "lunge", "curl", "triceps", "face_pull", "plank"];
+const DEFAULT_PROGRAM = ["squat", "bench", "deadlift", "row", "ohp", "pullup", "rdl", "lunge", "curl", "triceps", "face_pull", "cable_crunch"];
 
 type LiftRow = {
   id: string;

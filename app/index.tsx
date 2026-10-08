@@ -84,7 +84,7 @@ export default function ConsoleScreen() {
         const weight = p ? (p.bodyweightOnly ? "bw" : item.lift.bodyweight ? `bw+${formatWeight(p.weight)}` : formatWeight(p.weight)) : "";
         if (!weight) continue;
         out.push({
-          label: `${item.lift.name.split(" ")[0]} ${weight}×${item.reps}×${item.sets}`,
+          label: `${item.lift.name} ${weight}×${item.reps}×${item.sets}`,
           text: `${item.lift.aliases[0] ?? item.lift.name} ${weight}x${item.reps}x${item.sets} @${item.rpe}`,
           tone: groupColors[item.lift.group],
         });
@@ -98,7 +98,9 @@ export default function ConsoleScreen() {
       if (!lift) continue;
       seen.add(set.liftId);
       const weight = lift.bodyweight ? (set.weight > 0 ? `bw+${formatWeight(set.weight)}` : "bw") : formatWeight(set.weight);
-      out.push({ label: `↻ ${lift.name.split(" ")[0]} ${weight}×${set.reps}`, text: `${lift.aliases[0] ?? lift.name} ${weight}x${set.reps}` });
+      // Полное имя, а не первое слово: "Barbell 33×10" и "Barbell 75×8" на
+      // эмуляторе оказались сгибанием и тягой — различить было нельзя.
+      out.push({ label: `↻ ${lift.name} ${weight}×${set.reps}`, text: `${lift.aliases[0] ?? lift.name} ${weight}x${set.reps}` });
     }
     return out;
   }, [week, sets, liftById, today]);
@@ -237,7 +239,9 @@ export default function ConsoleScreen() {
             <StatPill
               icon={<Gauge size={14} color={theme.colors.accent} />}
               label="Form"
-              value={now ? `${now.form >= 0 ? "+" : ""}${Math.round(now.form)}` : "—"}
+              // Форма в процентах от готовности: сырое "−87" не имеет шкалы и
+              // только пугает, "−32%" читается как "устал на треть".
+              value={now && now.fitness > 1 ? `${now.form >= 0 ? "+" : ""}${Math.round((now.form / now.fitness) * 100)}%` : "—"}
             />
             <StatPill
               icon={<View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: zone ? zoneColors[zone] : theme.colors.border }} />}

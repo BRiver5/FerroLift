@@ -2,7 +2,7 @@
 
 import { LIFT_PRESETS, type Lift, type Session, type SetEntry } from "./model.ts";
 
-export function presetLifts(inProgram: string[] = ["squat", "bench", "deadlift", "row", "ohp", "pullup", "curl", "plank", "rdl", "face_pull", "lunge", "triceps"]): Lift[] {
+export function presetLifts(inProgram: string[] = ["squat", "bench", "deadlift", "row", "ohp", "pullup", "curl", "cable_crunch", "rdl", "face_pull", "lunge", "triceps"]): Lift[] {
   return LIFT_PRESETS.map((preset) => ({
     id: preset.key,
     name: preset.name,

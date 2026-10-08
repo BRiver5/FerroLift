@@ -102,6 +102,13 @@ test("для подтягиваний назначается добавочны�
   assert.equal(weak.weight, 0);
 });
 
+test("пресс с весом тела не получает выдуманного максимума", () => {
+  const legRaise = lifts.find((lift) => lift.id === "hanging_raise")!;
+  assert.equal(sessionObservation([set("s", "hanging_raise", 0, 12, 8)], legRaise, 75), null);
+  // А подтягивания — получают: это движение с весом тела, но не пресс.
+  assert.ok(sessionObservation([set("s", "pullup", 0, 8, 8)], pullup, 75)! > 0);
+});
+
 test("пересборка по истории идёт в хронологическом порядке", () => {
   const sessions = [session("b", "2026-09-10"), session("a", "2026-09-01")];
   const sets = [set("a", "squat", 100, 5, 8), set("b", "squat", 110, 5, 8)];

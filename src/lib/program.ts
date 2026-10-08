@@ -11,7 +11,7 @@
 // а не ноги три дня подряд.
 
 import type { Lift, MuscleGroup, SessionSize } from "./model.ts";
-import { estimateLift, prescribe, type Prescription, type StrengthModel } from "./strength.ts";
+import { estimateLift, isEstimable, prescribe, type Prescription, type StrengthModel } from "./strength.ts";
 
 const ROTATION_A: MuscleGroup[] = ["legs", "push", "core"];
 const ROTATION_B: MuscleGroup[] = ["hinge", "pull", "arms"];
@@ -81,13 +81,18 @@ export function programForDay(
     rotation,
     lifts: chosen.map((lift) => {
       const reps = lift.kind === "compound" ? recipe.compoundReps : recipe.accessoryReps;
-      const estimate = estimateLift(strength, lift.id, asOf);
+      const estimate = isEstimable(lift) ? estimateLift(strength, lift.id, asOf) : null;
       return {
         lift,
         sets: lift.kind === "compound" ? recipe.compoundSets : recipe.accessorySets,
         reps,
         rpe: recipe.rpe,
-        prescription: estimate ? prescribe(estimate.e1rm, reps, recipe.rpe, lift, bodyweight) : null,
+        prescription: estimate
+          ? prescribe(estimate.e1rm, reps, recipe.rpe, lift, bodyweight)
+          : // Пресс с весом тела: веса нет по определению — подходы на собственном весе.
+            !isEstimable(lift)
+            ? { weight: 0, reps, rpe: recipe.rpe, intensity: 0, bodyweightOnly: true }
+            : null,
       };
     }),
   };
