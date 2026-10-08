@@ -71,7 +71,8 @@ export default function ExplainScreen() {
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.md }}>
           <IconButton icon={<ArrowLeft size={18} color={theme.colors.ink} />} onPress={() => router.back()} />
-          <View>
+          {/* flex: 1 — без него Android мерил блок по ширине самой узкой строки и ломал заголовок на две. */}
+          <View style={{ flex: 1 }}>
             <Text style={{ ...theme.typography.subtitle, color: theme.colors.ink }}>Why this week</Text>
             <Text style={{ ...theme.typography.caption, color: theme.colors.inkMuted }}>
               {settings.target.kind === "peak" ? `Peaking for ${settings.target.date}` : "Building fitness"}

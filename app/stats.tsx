@@ -15,7 +15,7 @@ import { Heatmap } from "../src/components/Heatmap";
 import { EmptyState } from "../src/components/EmptyState";
 import { PressableScale } from "../src/components/PressableScale";
 import { groupVolume, liftHistory, personalRecords, sessionActivity, trendFor, weeklyLoads, zoneShare } from "../src/lib/stats.ts";
-import { formatShort, todayIso } from "../src/lib/dates.ts";
+import { addDays, formatShort, todayIso } from "../src/lib/dates.ts";
 import { GROUP_LABELS, type MuscleGroup } from "../src/lib/model.ts";
 import { RAMP_MIN_HISTORY_DAYS } from "../src/lib/planner.ts";
 
@@ -42,7 +42,14 @@ export default function StatsScreen() {
         .sort((a, b) => b.trend.slopePerWeek - a.trend.slopePerWeek),
     [scopedLifts, sessions, sets, settings.bodyweight, today]
   );
-  const zones = useMemo(() => zoneShare(week.snap.history.map((p) => p.acwr)), [week]);
+  // Только дни после трёх недель истории: до этого 28-дневное среднее ещё
+  // набирается, и каждая тренировка выглядит "скачком" — на эмуляторе это
+  // давало "jumps 48%" у вполне ровного графика.
+  const zones = useMemo(() => {
+    const first = loads.reduce<string | null>((min, item) => (min === null || item.date < min ? item.date : min), null);
+    const from = first ? addDays(first, RAMP_MIN_HISTORY_DAYS) : today;
+    return zoneShare(week.snap.history.filter((p) => p.date >= from).map((p) => p.acwr));
+  }, [week, loads, today]);
   const activity = useMemo(() => sessionActivity(loads, 12, today), [loads, today]);
   const maxDay = Math.max(1, ...activity.flatMap((w) => w.counts));
   const cells = activity.flatMap((w) => w.counts.map((count, day) => ({ key: `${w.weekStart}-${day}`, intensity: count / maxDay })));
@@ -59,7 +66,8 @@ export default function StatsScreen() {
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.md }}>
           <IconButton icon={<ArrowLeft size={18} color={theme.colors.ink} />} onPress={() => router.back()} />
-          <View>
+          {/* flex: 1 — без него Android мерил блок по ширине самой узкой строки и ломал заголовок на две. */}
+          <View style={{ flex: 1 }}>
             <Text style={{ ...theme.typography.subtitle, color: theme.colors.ink }}>Progress</Text>
             <Text style={{ ...theme.typography.caption, color: theme.colors.inkMuted }}>{group ? `${GROUP_LABELS[group]} only` : "All lifts"}</Text>
           </View>
