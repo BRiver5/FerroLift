@@ -109,26 +109,58 @@ export function snapshot(input: EngineInput): Snapshot {
 export type WeekPlan = {
   snap: Snapshot;
   search: PlanSearch;
-  /** Что показываем: собранное пользователем руками, если есть, иначе лучший найденный. */
+  /**
+   * Что показываем: лучшая неделя с учётом зафиксированных пользователем
+   * дней. Если допустимой нет — неделя "как зафиксировано, остальное отдых",
+   * с перечисленными нарушениями: пустой экран хуже честного "так нельзя".
+   */
   shown: Plan | null;
-  manual: boolean;
+  /** Лучшая неделя БЕЗ ручных фиксаций — для сравнения "твоя версия против свободной". */
+  free: Plan | null;
   programs: Record<string, DayProgram | null>;
 };
 
-export function planWeek(input: EngineInput, manualSizes?: SessionSize[] | null): WeekPlan {
+const ROTATION_A_GROUPS = new Set(["legs", "push", "core"]);
+
+/**
+ * Какая ротация была последней. Без этого каждая неделя начиналась бы с A, и
+ * человек, сделавший ноги в воскресенье, получал бы ноги снова в понедельник.
+ */
+export function lastRotation(input: EngineInput): "A" | "B" | null {
+  const latest = [...input.sessions].sort((a, b) => b.date.localeCompare(a.date)).find((s) => input.sets.some((set) => set.sessionId === s.id));
+  if (!latest) return null;
+  const liftById = new Map(input.lifts.map((lift) => [lift.id, lift]));
+  let a = 0;
+  let b = 0;
+  for (const set of input.sets) {
+    if (set.sessionId !== latest.id) continue;
+    const lift = liftById.get(set.liftId);
+    if (!lift) continue;
+    if (ROTATION_A_GROUPS.has(lift.group)) a += 1;
+    else b += 1;
+  }
+  return a >= b ? "A" : "B";
+}
+
+export function planWeek(input: EngineInput): WeekPlan {
   const snap = snapshot(input);
   const search = searchPlans(snap.request);
-  const manual = Boolean(manualSizes && manualSizes.length === snap.request.days);
-  const shown = manual ? evaluatePlan(snap.request, manualSizes as SessionSize[]) : search.best;
+  const locked = snap.request.constraints.locked;
+  const hasLocks = Object.keys(locked).length > 0;
+
+  let shown = search.best;
+  if (!shown) {
+    const sizes = Array.from({ length: snap.request.days }, (_, i) => locked[addDays(snap.request.start, i)] ?? "rest");
+    shown = evaluatePlan(snap.request, sizes);
+  }
+  const free = hasLocks ? searchPlans({ ...snap.request, constraints: { ...snap.request.constraints, locked: {} } }).best : null;
 
   const programs: Record<string, DayProgram | null> = {};
-  if (shown) {
-    let rotation = 0;
-    for (const day of shown.days) {
-      programs[day.date] = programForDay(day.size, rotation, input.lifts, input.strength, input.settings.bodyweight, snap.today);
-      if (day.size !== "rest") rotation += 1;
-    }
+  let rotation = lastRotation(input) === "A" ? 1 : 0;
+  for (const day of shown.days) {
+    programs[day.date] = programForDay(day.size, rotation, input.lifts, input.strength, input.settings.bodyweight, snap.today);
+    if (day.size !== "rest") rotation += 1;
   }
 
-  return { snap, search, shown, manual, programs };
+  return { snap, search, shown, free, programs };
 }

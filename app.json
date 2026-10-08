@@ -6,12 +6,12 @@
     "scheme": "ferrolift",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FFFFFF"
+      "backgroundColor": "#DEDFDC"
     },
     "ios": {
       "supportsTablet": true,
@@ -22,10 +22,11 @@
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundImage": "./assets/adaptive-icon-background.png",
-        "foregroundImage": "./assets/adaptive-icon-foreground.png"
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
+        "backgroundColor": "#DEDFDC"
       },
       "predictiveBackGestureEnabled": false,
-      "_comment_blockedPermissions": "Приложение по умолчанию локальное: только уведомления и вибрация. Если конкретному приложению реально нужно что-то из списка ниже — удали строку и напиши рядом, зачем (см. docs/PLAN.template.md, раздел 'Разрешения').",
+      "_comment_blockedPermissions": "Приложение полностью локальное: ни сети, ни уведомлений, ни датчиков — только вибрация (expo-haptics).",
       "blockedPermissions": [
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.USE_EXACT_ALARM",
@@ -51,14 +52,7 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-font",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#000000"
-        }
-      ]
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

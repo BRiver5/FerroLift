@@ -142,22 +142,37 @@ test("снимок: сегодняшняя тренировка уже в ист
   assert.equal(snap.history.length, 42);
 });
 
-test("неделя целиком: план, программы на тренировочные дни, ручная правка поверх", () => {
+test("неделя целиком: план и программы на тренировочные дни", () => {
   const sessions = [session("a", "2026-10-05", { rpe: 7, minutes: 60 }), session("b", "2026-10-08", { rpe: 8, minutes: 55 })];
   const sets = [set("a", "squat", 100, 5, 8), set("b", "bench", 80, 5, 8)];
   let strength = emptyStrengthModel();
   strength = observeLift(strength, "squat", 125, "2026-10-05");
-  const input = { lifts, sessions, sets, strength, settings: DEFAULT_SETTINGS, today: "2026-10-12" };
-
-  const auto = planWeek(input);
-  assert.ok(auto.shown);
-  assert.equal(auto.manual, false);
-  for (const day of auto.shown!.days) {
-    if (day.size === "rest") assert.equal(auto.programs[day.date], null);
-    else assert.ok(auto.programs[day.date]!.lifts.length > 0);
+  const week = planWeek({ lifts, sessions, sets, strength, settings: DEFAULT_SETTINGS, today: "2026-10-12" });
+  assert.ok(week.shown);
+  assert.equal(week.free, null, "без фиксаций сравнивать не с чем");
+  for (const day of week.shown!.days) {
+    if (day.size === "rest") assert.equal(week.programs[day.date], null);
+    else assert.ok(week.programs[day.date]!.lifts.length > 0);
   }
+});
 
-  const manual = planWeek(input, ["hard", "rest", "hard", "rest", "hard", "rest", "rest"]);
-  assert.equal(manual.manual, true);
-  assert.deepEqual(manual.shown!.sizes, ["hard", "rest", "hard", "rest", "hard", "rest", "rest"]);
+test("фиксация дня: планировщик строит вокруг неё и показывает свободную версию рядом", () => {
+  const settings = {
+    ...DEFAULT_SETTINGS,
+    constraints: { ...DEFAULT_SETTINGS.constraints, locked: { "2026-10-12": "hard" as const, "2026-10-13": "hard" as const } },
+  };
+  const week = planWeek({ lifts, sessions: [], sets: [], strength: emptyStrengthModel(), settings, today: "2026-10-12" });
+  assert.equal(week.shown!.days[0].size, "hard");
+  assert.equal(week.shown!.days[1].size, "hard");
+  assert.ok(week.free);
+  assert.ok(week.shown!.violations.some((v) => v.kind === "back-to-back"));
+});
+
+test("ротация продолжается от последней тренировки", () => {
+  // Последняя тренировка — ноги (A), значит первый день новой недели — B.
+  const sessions = [session("a", "2026-10-11")];
+  const sets = [set("a", "squat", 100, 5, 8), set("a", "squat", 100, 5, 8), set("a", "bench", 80, 5, 8)];
+  const week = planWeek({ lifts, sessions, sets, strength: emptyStrengthModel(), settings: DEFAULT_SETTINGS, today: "2026-10-12" });
+  const firstTraining = week.shown!.days.find((day) => day.size !== "rest")!;
+  assert.equal(week.programs[firstTraining.date]!.rotation, "B");
 });

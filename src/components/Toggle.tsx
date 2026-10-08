@@ -12,8 +12,12 @@ export function Toggle({ value, onValueChange }: Props) {
     <Switch
       value={value}
       onValueChange={onValueChange}
-      trackColor={{ false: theme.colors.surfaceAlt, true: theme.colors.accent }}
-      thumbColor={theme.colors.onAccent}
+      // false-дорожка — border, а не surfaceAlt: на карточке того же тона
+      // выключенный переключатель сливался с фоном и выглядел отсутствующим
+      // (баг шаблона, вылезал на эмуляторе в прошлых приложениях). Бегунок —
+      // фиксированный белый, иначе в выключенном состоянии он тоже исчезает.
+      trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
+      thumbColor="#FFFFFF"
     />
   );
 }
